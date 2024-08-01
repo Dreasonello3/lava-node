@@ -297,9 +297,20 @@ func parseGeneric(input interface{}, genericParser spectypes.GenericParser) (*Pa
 		parsed.parsedBlock = spectypes.LATEST_BLOCK
 		return parsed, nil
 		// return appendInterfaceToInterfaceArray(spectypes.LATEST_BLOCK), nil
+	case spectypes.PARSER_TYPE_BLOCK_HASH:
+		return parseGenericParserBlockHash(value)
 	default:
 		return nil, fmt.Errorf("unsupported generic parser type")
 	}
+}
+
+func parseGenericParserBlockHash(value interface{}) (*ParsedInput, error) {
+	// TODO: Validate that the value is a hash
+
+	// ret := appendInterfaceToInterfaceArray(value)
+	parsed := NewParsedInput()
+	parsed.parsedHashes = append(parsed.parsedHashes, value.(string))
+	return parsed, nil
 }
 
 func findGenericParserValue(input interface{}, genericParser spectypes.GenericParser) (interface{}, error) {
