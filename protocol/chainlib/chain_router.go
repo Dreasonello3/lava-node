@@ -2,7 +2,7 @@ package chainlib
 
 import (
 	"context"
-	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/lavanet/lava/protocol/chainlib/chainproxy/rpcclient"
@@ -81,9 +81,9 @@ func batchNodeUrlsByServices(rpcProviderEndpoint lavasession.RPCProviderEndpoint
 	for _, nodeUrl := range rpcProviderEndpoint.NodeUrls {
 		routerKey := lavasession.NewRouterKey(nodeUrl.Addons)
 
-		u, err := url.Parse(nodeUrl.Url)
+		isWs, err := IsUrlWebSocket(nodeUrl.Url)
 		// Some parsing may fail because of gRPC
-		if err == nil && (u.Scheme == "ws" || u.Scheme == "wss") {
+		if err == nil && isWs {
 			// if websocket, check if we have a router key for http already. if not add a websocket router key
 			// so in case we didn't get an http endpoint, we can use the ws one.
 			if _, ok := returnedBatch[routerKey]; !ok {
@@ -198,7 +198,7 @@ func (rs *requirementSt) String() string {
 }
 
 func (rs *requirementSt) IsRequirementMet(requirement string) bool {
-	return string(rs.extensions) == requirement || rs.addon == requirement
+	return strings.Contains(string(rs.extensions), requirement) || rs.addon == requirement
 }
 
 func populateRequiredForAddon(addon string, extensions []string, required map[requirementSt]struct{}) {
