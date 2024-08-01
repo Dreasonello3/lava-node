@@ -3,6 +3,9 @@ package keeper
 import (
 	"fmt"
 
+	"cosmossdk.io/collections"
+	collcompat "github.com/lavanet/lava/utils/collcompat"
+
 	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	timerstoretypes "github.com/lavanet/lava/x/timerstore/types"
 
@@ -30,10 +33,14 @@ type (
 		subscriptionKeeper types.SubscriptionKeeper
 		planKeeper         types.PlanKeeper
 		badgeTimerStore    timerstoretypes.TimerStore
-		providerQosFS      fixationtypes.FixationStore
+		reputationsFS      fixationtypes.FixationStore
 		downtimeKeeper     types.DowntimeKeeper
 		dualstakingKeeper  types.DualstakingKeeper
 		stakingKeeper      types.StakingKeeper
+
+		schema            collections.Schema
+		reputations       *collections.IndexedMap[collections.Triple[string, string, string], types.Reputation, types.ReputationRefIndexes] // save qos info per provider, chain and cluster
+		reputationRefKeys collections.KeySet[collections.Pair[string, string]]
 	}
 )
 
@@ -71,6 +78,8 @@ func NewKeeper(
 		ps = ps.WithKeyTable(types.ParamKeyTable())
 	}
 
+	sb := collections.NewSchemaBuilder(collcompat.NewKVStoreService(storeKey))
+
 	keeper := &Keeper{
 		cdc:                cdc,
 		storeKey:           storeKey,
@@ -86,6 +95,16 @@ func NewKeeper(
 		downtimeKeeper:     downtimeKeeper,
 		dualstakingKeeper:  dualstakingKeeper,
 		stakingKeeper:      stakingKeeper,
+
+		reputations: collections.NewIndexedMap(sb, types.ReputationPrefix, "reputations",
+			collections.TripleKeyCodec(collections.StringKey, collections.StringKey, collections.StringKey),
+			collcompat.ProtoValue[types.Reputation](cdc),
+			types.NewReputationRefIndexes(sb),
+		),
+
+		reputationRefKeys: collections.NewKeySet(sb, types.ReputationRefKeysPrefix, "reputations_ref_keys",
+			collections.PairKeyCodec(collections.StringKey, collections.StringKey),
+		),
 	}
 
 	// note that the timer and badgeUsedCu keys are the same (so we can use only the second arg)
@@ -96,7 +115,13 @@ func NewKeeper(
 		WithCallbackByBlockHeight(badgeTimerCallback)
 	keeper.badgeTimerStore = *badgeTimerStore
 
-	keeper.providerQosFS = *fixationStoreKeeper.NewFixationStore(storeKey, types.ProviderQosStorePrefix)
+	keeper.reputationsFS = *fixationStoreKeeper.NewFixationStore(storeKey, types.ProviderQosStorePrefix)
+
+	schema, err := sb.Build()
+	if err != nil {
+		panic(err)
+	}
+	keeper.schema = schema
 
 	return keeper
 }
@@ -118,10 +143,10 @@ func (k Keeper) BeginBlock(ctx sdk.Context) {
 	}
 }
 
-func (k Keeper) InitProviderQoS(ctx sdk.Context, gs fixationtypes.GenesisState) {
-	k.providerQosFS.Init(ctx, gs)
+func (k Keeper) InitReputations(ctx sdk.Context, gs fixationtypes.GenesisState) {
+	k.reputationsFS.Init(ctx, gs)
 }
 
-func (k Keeper) ExportProviderQoS(ctx sdk.Context) fixationtypes.GenesisState {
-	return k.providerQosFS.Export(ctx)
+func (k Keeper) ExportReputations(ctx sdk.Context) fixationtypes.GenesisState {
+	return k.reputationsFS.Export(ctx)
 }
